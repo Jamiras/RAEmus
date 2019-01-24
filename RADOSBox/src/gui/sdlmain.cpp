@@ -50,6 +50,11 @@
 #include "cross.h"
 #include "control.h"
 
+/* RETROACHIEVEMENTS */
+#include "../visualc_net/retroachievements.h"
+#include "SDL_syswm.h"
+/* RETROACHIEVEMENTS */
+
 #define MAPPERFILE "mapper-" VERSION ".map"
 //#define DISABLE_JOYSTICK
 
@@ -291,14 +296,21 @@ void GFX_SetTitle(Bit32s cycles,Bits frameskip,bool paused){
 	static Bit32s internal_frameskip=0;
 	if(cycles != -1) internal_cycles = cycles;
 	if(frameskip != -1) internal_frameskip = frameskip;
+
+	/*RETROACHIEVEMENTS*/
 	if(CPU_CycleAutoAdjust) {
-		sprintf(title,"DOSBox %s, CPU speed: max %3d%% cycles, Frameskip %2d, Program: %8s",VERSION,internal_cycles,internal_frameskip,RunningProgram);
+		sprintf(title,"CPU speed: max %3d%% cycles, Frameskip %2d, Program: %8s",internal_cycles,internal_frameskip,RunningProgram);
 	} else {
-		sprintf(title,"DOSBox %s, CPU speed: %8d cycles, Frameskip %2d, Program: %8s",VERSION,internal_cycles,internal_frameskip,RunningProgram);
+		sprintf(title,"CPU speed: %8d cycles, Frameskip %2d, Program: %8s",internal_cycles,internal_frameskip,RunningProgram);
 	}
+	/*RETROACHIEVEMENTS*/
 
 	if(paused) strcat(title," PAUSED");
-	SDL_WM_SetCaption(title,VERSION);
+
+	/*RETROACHIEVEMENTS*/
+	//SDL_WM_SetCaption(title,VERSION);
+	RA_UpdateAppTitle(title);
+	/*RETROACHIEVEMENTS*/
 }
 
 static unsigned char logo[32*32*4]= {
@@ -941,15 +953,31 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 	sdl.updating=false;
 	switch (sdl.desktop.type) {
 	case SCREEN_SURFACE:
+		/* RETROACHIEVEMENTS */
+		if (RA_IsOverlayFullyVisible())
+			break;
+		/* RETROACHIEVEMENTS */
+
 		if (SDL_MUSTLOCK(sdl.surface)) {
 			if (sdl.blit.surface) {
 				SDL_UnlockSurface(sdl.blit.surface);
-				int Blit = SDL_BlitSurface( sdl.blit.surface, 0, sdl.surface, &sdl.clip );
-				LOG(LOG_MISC,LOG_WARN)("BlitSurface returned %d",Blit);
+				int Blit = SDL_BlitSurface(sdl.blit.surface, 0, sdl.surface, &sdl.clip);
+				LOG(LOG_MISC, LOG_WARN)("BlitSurface returned %d", Blit);
 			} else {
 				SDL_UnlockSurface(sdl.surface);
 			}
 			SDL_Flip(sdl.surface);
+		/* RETROACHIEVEMENTS */
+
+		} else {
+			sdl.updateRects[0].x = sdl.clip.x;
+			sdl.updateRects[0].y = sdl.clip.y;
+			sdl.updateRects[0].w = (Bit16u)sdl.draw.width;
+			sdl.updateRects[0].h = (Bit16u)sdl.draw.height;
+			SDL_UpdateRects(sdl.surface, 1, sdl.updateRects);
+
+		/* RETROACHIEVEMENTS */
+/*
 		} else if (changedLines) {
 			Bitu y = 0, index = 0, rectCount = 0;
 			while (y < sdl.draw.height) {
@@ -972,6 +1000,7 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			}
 			if (rectCount)
 				SDL_UpdateRects( sdl.surface, rectCount, sdl.updateRects );
+*/
 		}
 		break;
 #if C_DDRAW
@@ -1033,6 +1062,27 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 	default:
 		break;
 	}
+
+	/* RETROACHIEVEMENTS */
+	RA_HandleHTTPResults();
+
+	HDC hdc = GetDC(g_mainWindow);
+	if (hdc) {
+		static Uint32 last_tick = SDL_GetTicks();
+		Uint32 tick = SDL_GetTicks();
+
+		ControllerInput input;
+		memset(&input, 0, sizeof(input));
+
+		RECT size;
+		GetClientRect(g_mainWindow, &size);
+
+		RA_UpdateRenderOverlay(hdc, &input, (tick - last_tick) / 1000.0f, &size, false, false);
+		last_tick = tick;
+
+		ReleaseDC(g_mainWindow, hdc);
+	}
+	/* RETROACHIEVEMENTS */
 }
 
 
@@ -2157,6 +2207,22 @@ int main(int argc, char* argv[]) {
 //		if (control->cmdline->FindExist("-startui")) UI_Run(false);
 		/* Init all the sections */
 		control->Init();
+
+		/* RETROACHIEVEMENTS */
+		{
+			SDL_SysWMinfo wmInfo;
+			SDL_VERSION(&wmInfo.version);
+			SDL_GetWMInfo(&wmInfo);
+			g_mainWindow = wmInfo.window;
+			//SetMenu(g_mainWindow, _menu);
+
+			RA_Init(g_mainWindow, 11 /* RA_DOSBox */, "0.01");
+			//RA_InitShared();
+			RA_AttemptLogin(false);
+			//RebuildMenu();
+		}
+		/* RETROACHIEVEMENTS */
+
 		/* Some extra SDL Functions */
 		Section_prop * sdl_sec=static_cast<Section_prop *>(control->GetSection("sdl"));
 
