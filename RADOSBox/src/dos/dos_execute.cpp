@@ -27,6 +27,8 @@
 #include "debug.h"
 #include "cpu.h"
 
+#include "..\visualc_net\retroachievements.h"
+
 const char * RunningProgram="DOSBOX";
 
 #ifdef _MSC_VER
@@ -398,6 +400,31 @@ bool DOS_Execute(char * name,PhysPt block_pt,Bit8u flags) {
 		}
 	}
 	delete[] loadbuf;
+
+    /* RETROACHIEVEMENTS */
+    Bit32u exesize = 0; DOS_SeekFile(fhandle, &exesize, DOS_SEEK_END);
+    if (!iscom || !RA_KnownUtility(name, exesize)) {
+        pos = 0; DOS_SeekFile(fhandle, &pos, DOS_SEEK_SET);
+        loadbuf = (Bit8u *)new Bit8u[exesize];
+        Bit8u* ptr = loadbuf;
+        imagesize = exesize;
+        while (imagesize > 32768) {
+            len = 32768; DOS_ReadFile(fhandle, ptr, &len);
+            ptr += 32768;
+            imagesize -= 32768;
+        }
+        len = (Bit16u)imagesize; DOS_ReadFile(fhandle, loadbuf, &len);
+
+        unsigned int nGameId = RA_IdentifyRom(loadbuf, exesize);
+        delete[] loadbuf;
+
+        if (nGameId != g_activeGameId) {
+            g_activeGameId = nGameId;
+            RA_ActivateGame(nGameId);
+        }
+    }
+    /* RETROACHIEVEMENTS */
+
 	DOS_CloseFile(fhandle);
 
 	/* Setup a psp */
